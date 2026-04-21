@@ -16,7 +16,7 @@ import { STATUS_STYLES, useQuoteLog } from '../context/QuoteLogStore';
 
 const TODAY = parseISO('2026-04-21');
 
-const CENSUS_OPTIONS = ['Census Received', 'Ready for Associate', 'Census Loaded', 'Waiting', 'DTQ', '—'];
+const CENSUS_OPTIONS = ['Waiting', 'Member Census', 'Employee Census', 'Experience', 'Apps', 'Ready for Associate', 'Census Loaded', 'DTQ', '—'];
 const SOB_OPTIONS    = ['—', 'Received', 'In Progress', 'Entered', 'DTQ'];
 const RISK_OPTIONS   = ['—', 'Received', 'In Progress', 'Entered', 'DTQ'];
 const SETUP_OPTIONS  = ['—', 'In Progress', 'Done'];

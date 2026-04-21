@@ -3,10 +3,15 @@ import { createContext, useContext, useState } from 'react';
 // ─── Status styles ─────────────────────────────────────────────────────────────
 
 export const STATUS_STYLES = {
-  'Census Received':     { bg: '#fff3e0', color: '#b25f01', border: '#ffe0b2' },
-  'Ready for Associate': { bg: '#e1eaf7', color: '#1166bb', border: '#b5d4f4' },
-  'Census Loaded':       { bg: '#e1eaf7', color: '#1166bb', border: '#b5d4f4' },
+  // Census statuses (A.5)
   'Waiting':             { bg: '#fff3e0', color: '#b25f01', border: '#ffe0b2' },
+  'Member Census':       { bg: '#e1eaf7', color: '#1166bb', border: '#b5d4f4' },
+  'Employee Census':     { bg: '#e1eaf7', color: '#1166bb', border: '#b5d4f4' },
+  'Experience':          { bg: '#e1eaf7', color: '#1166bb', border: '#b5d4f4' },
+  'Apps':                { bg: '#e1eaf7', color: '#1166bb', border: '#b5d4f4' },
+  'Ready for Associate': { bg: '#e1eaf7', color: '#1166bb', border: '#b5d4f4' },
+  'Census Loaded':       { bg: '#f0f7ec', color: '#4f8406', border: '#c8e6b0' },
+  // SoB / Risk statuses
   'Received':            { bg: '#f0f7ec', color: '#4f8406', border: '#c8e6b0' },
   'In Progress':         { bg: '#e1eaf7', color: '#1166bb', border: '#b5d4f4' },
   'Entered':             { bg: '#f0f7ec', color: '#4f8406', border: '#c8e6b0' },
@@ -18,9 +23,14 @@ export const STATUS_STYLES = {
 // ─── TPA master data ──────────────────────────────────────────────────────────
 
 export const TPA_MAP = {
-  CCAE: { code: 'CCAE', label: 'CCAE — Continental Casualty', carrier: 'Pan American', is: 'Sara K.',  uw: 'Steve Rogers', uwInitials: 'SR', notes: 'Standard processing. All lines eligible.' },
-  ASR:  { code: 'ASR',  label: 'ASR — American Standard Resources', carrier: 'Aetna',   is: 'James M.', uw: 'Jason M.',     uwInitials: 'JM', notes: 'Large group focus. Renewal SLA: 14 days.' },
-  IMS:  { code: 'IMS',  label: 'IMS — Integrated Medical Solutions',  carrier: 'BCBS',   is: 'Linda T.', uw: 'Vicki C.',     uwInitials: 'VC', notes: 'West coast accounts. Min 10 lives.' },
+  CCAE: { code: 'CCAE', label: 'CCAE — Continental Casualty',            carrier: 'Pan American',    is: 'Sara K.',  uw: 'Steve Rogers', uwInitials: 'SR', notes: 'Standard processing. All lines eligible.' },
+  ASR:  { code: 'ASR',  label: 'ASR — American Standard Resources',      carrier: 'Aetna',           is: 'James M.', uw: 'Jason M.',     uwInitials: 'JM', notes: 'Large group focus. Renewal SLA: 14 days.' },
+  IMS:  { code: 'IMS',  label: 'IMS — Integrated Medical Solutions',     carrier: 'BCBS',            is: 'Linda T.', uw: 'Vicki C.',     uwInitials: 'VC', notes: 'West coast accounts. Min 10 lives.' },
+  EHRC: { code: 'EHRC', label: 'EHRC — Employee Health Risk Consortium', carrier: 'Pan American',    is: 'Sara K.',  uw: 'Steve Rogers', uwInitials: 'SR', notes: 'EHRC program — additional documentation required on select producer combos.' },
+  MASP: { code: 'MASP', label: 'MASP — Mid-American Self-Funded Plans',  carrier: 'Aetna',           is: 'James M.', uw: 'Jason M.',     uwInitials: 'JM', notes: 'MASP program — special handling on select producer combos.' },
+  BIC:  { code: 'BIC',  label: 'BIC — Benefits Innovation Consortium',   carrier: 'BCBS',            is: 'Linda T.', uw: 'Vicki C.',     uwInitials: 'VC', notes: 'BIC program — special handling on select producer combos.' },
+  WEL:  { code: 'WEL',  label: 'WEL — Wellness Partners',                carrier: 'Pan American',    is: 'Sara K.',  uw: 'Steve Rogers', uwInitials: 'SR', notes: 'Terminated relationship — decline to quote.' },
+  MCA:  { code: 'MCA',  label: 'MCA — MCA Benefits Group',               carrier: 'Aetna',           is: 'James M.', uw: 'Jason M.',     uwInitials: 'JM', notes: 'Terminated relationship — decline to quote.' },
 };
 
 export const TPA_OPTIONS = Object.values(TPA_MAP);
@@ -28,67 +38,68 @@ export const TPA_OPTIONS = Object.values(TPA_MAP);
 // ─── Initial rows ─────────────────────────────────────────────────────────────
 
 export const INITIAL_ROWS = [
+  // Deadlines recalculated: Rush = received + 3 biz days, Standard = received + 5 biz days
   {
     id: 1, groupName: 'Heartland Manufacturing Co', type: 'RENEWAL', tpa: 'CCAE',
     producer: 'Allied Benefits Group', effectiveDate: 'May 1, 2025',
-    assignedUW: 'SR', requestDate: '2026-04-15', deadline: '2026-04-23',
+    assignedUW: 'SR', requestDate: '2026-04-15', deadline: '2026-04-22',
     censusStatus: 'Ready for Associate', sob: 'Received', risk: 'Received', setup: 'Done',
     isRush: true, isDTQ: false, isDuplicate: false, isHandedOff: false,
   },
   {
     id: 2, groupName: 'Ironwood Industries', type: 'RENEWAL', tpa: 'CCAE',
     producer: 'Summit Insurance Brokers', effectiveDate: 'Jun 1, 2025',
-    assignedUW: 'SR', requestDate: '2026-04-12', deadline: '2026-04-30',
+    assignedUW: 'SR', requestDate: '2026-04-12', deadline: '2026-04-17',
     censusStatus: 'Waiting', sob: 'Received', risk: '—', setup: '—',
     isRush: false, isDTQ: false, isDuplicate: false, isHandedOff: false,
   },
   {
     id: 3, groupName: 'Meridian Health Partners', type: 'RENEWAL', tpa: 'ASR',
     producer: 'Midwest Benefits Consulting', effectiveDate: 'Jul 1, 2025',
-    assignedUW: 'JM', requestDate: '2026-04-08', deadline: '2026-04-20',
+    assignedUW: 'JM', requestDate: '2026-04-08', deadline: '2026-04-15',
     censusStatus: 'Census Loaded', sob: 'Entered', risk: 'Entered', setup: 'Done',
     isRush: false, isDTQ: false, isDuplicate: false, isHandedOff: true,
   },
   {
     id: 4, groupName: 'Prairie Schools Cooperative', type: 'RENEWAL', tpa: 'ASR',
     producer: 'Coastal Benefits Group', effectiveDate: 'Aug 1, 2025',
-    assignedUW: 'JM', requestDate: '2026-04-10', deadline: '2026-04-28',
+    assignedUW: 'JM', requestDate: '2026-04-10', deadline: '2026-04-17',
     censusStatus: 'Census Loaded', sob: 'Entered', risk: 'Entered', setup: 'Done',
     isRush: false, isDTQ: false, isDuplicate: false, isHandedOff: false,
   },
   {
     id: 5, groupName: 'Blue Ridge Medical Group', type: 'NEW', tpa: 'IMS',
     producer: 'Pacific Benefits Advisors', effectiveDate: '—',
-    assignedUW: 'VC', requestDate: '2026-04-16', deadline: '2026-04-18',
-    censusStatus: 'Census Received', sob: '—', risk: '—', setup: '—',
+    assignedUW: 'VC', requestDate: '2026-04-16', deadline: '2026-04-23',
+    censusStatus: 'Waiting', sob: '—', risk: '—', setup: '—',
     isRush: false, isDTQ: true, isDuplicate: false, isHandedOff: false,
   },
   {
     id: 6, groupName: 'Cascade River Schools', type: 'NEW', tpa: 'IMS',
     producer: 'Pacific Benefits Advisors', effectiveDate: '—',
     assignedUW: 'VC', requestDate: '2026-04-17', deadline: '2026-04-24',
-    censusStatus: 'Census Received', sob: '—', risk: '—', setup: '—',
+    censusStatus: 'Waiting', sob: '—', risk: '—', setup: '—',
     isRush: false, isDTQ: false, isDuplicate: false, isHandedOff: false,
   },
   {
     id: 7, groupName: 'Summit Logistics LLC', type: 'NEW', tpa: 'CCAE',
     producer: 'Allied Benefits Group', effectiveDate: '—',
-    assignedUW: 'SR', requestDate: '2026-04-16', deadline: '2026-04-25',
-    censusStatus: 'Census Received', sob: '—', risk: '—', setup: 'Done',
+    assignedUW: 'SR', requestDate: '2026-04-16', deadline: '2026-04-23',
+    censusStatus: 'Waiting', sob: '—', risk: '—', setup: 'Done',
     isRush: false, isDTQ: false, isDuplicate: true, isHandedOff: false,
   },
   {
     id: 8, groupName: 'Valley Community Hospital', type: 'NEW', tpa: 'ASR',
     producer: 'Midwest Benefits Consulting', effectiveDate: '—',
-    assignedUW: 'JM', requestDate: '2026-04-19', deadline: '2026-05-02',
-    censusStatus: 'Census Received', sob: '—', risk: '—', setup: 'Done',
+    assignedUW: 'JM', requestDate: '2026-04-19', deadline: '2026-04-24',
+    censusStatus: 'Waiting', sob: '—', risk: '—', setup: 'Done',
     isRush: false, isDTQ: false, isDuplicate: false, isHandedOff: false,
   },
   // Extra record: same name as #7 but different TPA — enables "Different TPA" demo in the autocomplete
   {
     id: 9, groupName: 'Summit Logistics LLC', type: 'RENEWAL', tpa: 'ASR',
     producer: 'Summit Insurance Brokers', effectiveDate: 'May 1, 2025',
-    assignedUW: 'JM', requestDate: '2026-03-20', deadline: '2026-03-28',
+    assignedUW: 'JM', requestDate: '2026-03-20', deadline: '2026-03-27',
     censusStatus: 'Census Loaded', sob: 'Entered', risk: 'Entered', setup: 'Done',
     isRush: false, isDTQ: false, isDuplicate: false, isHandedOff: false,
   },

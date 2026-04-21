@@ -3,7 +3,7 @@ import {
   Box, Button, Grid, Typography, Stack, Paper, Chip, Divider,
   Switch, FormControlLabel, TextField, Autocomplete, Select,
   MenuItem, FormControl, InputLabel, Dialog, DialogTitle,
-  DialogContent, DialogActions, Collapse, Tooltip, IconButton,
+  DialogContent, DialogContentText, DialogActions, Collapse, Tooltip, IconButton,
   InputAdornment, CircularProgress,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -15,7 +15,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import { format, differenceInCalendarDays, addDays, parseISO } from 'date-fns';
+import { format, differenceInCalendarDays, addDays, parseISO, addMonths } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { C } from '../theme/theme';
 import { TPA_MAP, TPA_OPTIONS, useQuoteLog } from '../context/QuoteLogStore';
@@ -24,13 +24,39 @@ import { TPA_MAP, TPA_OPTIONS, useQuoteLog } from '../context/QuoteLogStore';
 
 const TODAY = new Date('2026-04-20');
 
+// FIX 3: producers carry a short code for conditional-prompt matching
 const PRODUCER_OPTIONS = [
-  { agency: 'Allied Benefits Group',       contact: 'Dana Moore' },
-  { agency: 'Midwest Benefits Consulting', contact: 'Liz Harrington' },
-  { agency: 'Pacific Benefits Advisors',   contact: 'Greg Solis' },
-  { agency: 'Summit Insurance Brokers',    contact: 'Tanya Kemp' },
-  { agency: 'Coastal Benefits Group',      contact: 'Ryan Perez' },
+  { code: 'ABG',   agency: 'Allied Benefits Group',       contact: 'Dana Moore' },
+  { code: 'MBC',   agency: 'Midwest Benefits Consulting', contact: 'Liz Harrington' },
+  { code: 'PBA',   agency: 'Pacific Benefits Advisors',   contact: 'Greg Solis' },
+  { code: 'SIB',   agency: 'Summit Insurance Brokers',    contact: 'Tanya Kemp' },
+  { code: 'CBG',   agency: 'Coastal Benefits Group',      contact: 'Ryan Perez' },
+  { code: 'JPF',   agency: 'JP Financial Group',          contact: '' },
+  { code: 'MHS',   agency: 'MHS Benefits',                contact: '' },
+  { code: 'EVE',   agency: 'Everest Benefits',            contact: '' },
+  { code: 'PHPNI', agency: 'PHP Northeast Insurance',     contact: '' },
+  { code: 'SBS',   agency: 'Summit Benefits Services',    contact: '' },
+  { code: 'ELI',   agency: 'Eland Insurance',             contact: '' },
+  { code: 'IMA',   agency: 'IMA Financial Group',         contact: '' },
+  { code: 'WEL',   agency: 'Wellness Partners',           contact: '' },
+  { code: 'MCA',   agency: 'MCA Benefits Group',          contact: '' },
 ];
+
+// FIX 3: TPA+Producer combos that trigger conditional prompts
+const CONDITIONAL_PROMPTS = [
+  { tpa: 'EHRC', producer: 'JPF',   kind: 'EHRC', question: 'Is this an EHRC case?' },
+  { tpa: 'EHRC', producer: 'MHS',   kind: 'EHRC', question: 'Is this an EHRC case?' },
+  { tpa: 'MASP', producer: 'EVE',   kind: 'MASP', question: 'Is this a MASP case?' },
+  { tpa: 'MASP', producer: 'PHPNI', kind: 'MASP', question: 'Is this a MASP case?' },
+  { tpa: 'MASP', producer: 'SBS',   kind: 'MASP', question: 'Is this a MASP case?' },
+  { tpa: 'MASP', producer: 'ELI',   kind: 'MASP', question: 'Is this a MASP case?' },
+  { tpa: 'BIC',  producer: 'IMA',   kind: 'BIC',  question: 'Is this a BIC case?' },
+  { tpa: 'WEL',  producer: 'WEL',   kind: 'TERMINATED', question: null },
+  { tpa: 'MCA',  producer: 'MCA',   kind: 'TERMINATED', question: null },
+];
+
+// FIX 5: logged-by options
+const LOGGED_BY_OPTIONS = ['Traci Gamer', 'Trevor Pakratz', 'Heidi Bouma', 'Angie Vollhaber', 'Other'];
 
 const SIC_MAP = {
   '2759': { desc: 'Commercial Printing, NEC',               cat: 'Manufacturing' },
@@ -82,13 +108,19 @@ function fuzzy(a, b) {
          b.toLowerCase().includes(a.toLowerCase().slice(0, 6));
 }
 
+// FIX 6: date must be within ±6 months of today
+function isDateOutOfRange(date) {
+  if (!date) return false;
+  return date > addMonths(TODAY, 6) || date < addMonths(TODAY, -6);
+}
+
 // ─── Inline banner ─────────────────────────────────────────────────────────────
 
 const BANNER_VARIANTS = {
-  warning: { bg: '#fff3e0', border: C.orange,   text: C.orange },
-  error:   { bg: '#fdecea', border: C.red,      text: C.red },
+  warning: { bg: '#fff3e0', border: C.orange,    text: C.orange },
+  error:   { bg: '#fdecea', border: C.red,       text: C.red },
   info:    { bg: '#e1eaf7', border: C.blueLight, text: C.blueLight },
-  success: { bg: '#f0f7ec', border: C.green,    text: C.green },
+  success: { bg: '#f0f7ec', border: C.green,     text: C.green },
 };
 
 function InlineBanner({ variant = 'info', children, onClose }) {
@@ -161,7 +193,7 @@ function AutoFilledField({ label, value, onEdit, flash }) {
   );
 }
 
-// ─── EHRC segmented Yes / No ──────────────────────────────────────────────────
+// ─── Segmented Yes / No ───────────────────────────────────────────────────────
 
 function SegmentedYesNo({ value, onChange }) {
   return (
@@ -200,46 +232,82 @@ function ChecklistItem({ label, done }) {
 
 // ─── Custom Group Name Dropdown ───────────────────────────────────────────────
 
-function GroupNameDropdown({ value, onChange, onSelectRecord, rows, currentTPA, navigate }) {
+function GroupNameDropdown({ value, onChange, onSelectRecord, rows, currentTPA, navigate, locked, onUnlock }) {
   const [inputValue, setInputValue]  = useState(value || '');
   const [isOpen, setIsOpen]          = useState(false);
   const [highlightIdx, setHighlight] = useState(-1);
-  const wrapperRef = useRef(null);
+  // FIX 7: char-block notification
+  const [charBlockMsg, setCharBlockMsg] = useState(false);
+  const charBlockTimer = useRef(null);
+  const wrapperRef     = useRef(null);
+
+  // FIX 4: locked read-only state
+  if (locked) {
+    return (
+      <Box>
+        <TextField
+          fullWidth
+          label="Group name *"
+          size="small"
+          value={value}
+          disabled
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <LockOutlinedIcon sx={{ fontSize: 14, color: C.grayMid }} />
+              </InputAdornment>
+            ),
+          }}
+        />
+        <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mt: '4px' }}>
+          <Typography sx={{ fontSize: '12px', color: C.grayMid }}>
+            Renewal names must match prior year record ·
+          </Typography>
+          <Typography component="span" onClick={onUnlock}
+            sx={{ fontSize: '12px', color: C.blueLight, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+            Unlock
+          </Typography>
+        </Stack>
+      </Box>
+    );
+  }
 
   // Deduplicate by group name, keeping the most recent record per name.
   const groupSuggestions = useMemo(() => {
     const q = inputValue.trim().toLowerCase();
     if (q.length < 2) return [];
-
-    // Collect all matching records (not DTQ/handed-off)
     const matching = rows.filter(
       (r) => !r.isDTQ && !r.isHandedOff && r.groupName.toLowerCase().includes(q),
     );
-
-    // Group by name → keep only most recent per unique name (by id desc)
     const byName = new Map();
     matching.forEach((r) => {
-      if (!byName.has(r.groupName) || r.id > byName.get(r.groupName).id) {
-        byName.set(r.groupName, r);
-      }
+      if (!byName.has(r.groupName) || r.id > byName.get(r.groupName).id) byName.set(r.groupName, r);
     });
-
     return Array.from(byName.values())
       .slice(0, 6)
       .map((r) => {
-        const sameTPA = currentTPA && r.tpa === currentTPA.code;
+        const sameTPA    = currentTPA && r.tpa === currentTPA.code;
         const isDuplicate = !!currentTPA && sameTPA;
         return { ...r, isDuplicate };
       });
   }, [inputValue, rows, currentTPA]);
 
-  // Keyboard-navigable list: all group suggestions + the create item
-  const navigableCount = groupSuggestions.length + 1; // +1 for create
+  const navigableCount = groupSuggestions.length + 1;
 
   function handleInput(e) {
-    const v = e.target.value;
-    setInputValue(v);
-    onChange(v);
+    const raw = e.target.value;
+    // FIX 7: block # and /
+    if (/[#/]/.test(raw)) {
+      const cleaned = raw.replace(/[#/]/g, '');
+      onChange(cleaned);
+      setInputValue(cleaned);
+      clearTimeout(charBlockTimer.current);
+      setCharBlockMsg(true);
+      charBlockTimer.current = setTimeout(() => setCharBlockMsg(false), 3000);
+      return;
+    }
+    setInputValue(raw);
+    onChange(raw);
     setIsOpen(true);
     setHighlight(-1);
   }
@@ -260,18 +328,13 @@ function GroupNameDropdown({ value, onChange, onSelectRecord, rows, currentTPA, 
   function handleKeyDown(e) {
     if (!isOpen) return;
     if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHighlight((i) => Math.min(i + 1, navigableCount - 1));
+      e.preventDefault(); setHighlight((i) => Math.min(i + 1, navigableCount - 1));
     } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlight((i) => Math.max(i - 1, 0));
+      e.preventDefault(); setHighlight((i) => Math.max(i - 1, 0));
     } else if (e.key === 'Enter' && highlightIdx >= 0) {
       e.preventDefault();
-      if (highlightIdx < groupSuggestions.length) {
-        handleSelectGroup(groupSuggestions[highlightIdx]);
-      } else {
-        handleCreate();
-      }
+      if (highlightIdx < groupSuggestions.length) handleSelectGroup(groupSuggestions[highlightIdx]);
+      else handleCreate();
     } else if (e.key === 'Escape') {
       setIsOpen(false);
     }
@@ -299,6 +362,12 @@ function GroupNameDropdown({ value, onChange, onSelectRecord, rows, currentTPA, 
         onKeyDown={handleKeyDown}
         autoComplete="off"
       />
+      {/* FIX 7: char-block message */}
+      {charBlockMsg && (
+        <Typography sx={{ fontSize: '12px', color: C.orange, mt: '4px' }}>
+          Group names cannot contain # or /
+        </Typography>
+      )}
 
       {showDropdown && (
         <Paper elevation={0} sx={{
@@ -308,7 +377,6 @@ function GroupNameDropdown({ value, onChange, onSelectRecord, rows, currentTPA, 
           boxShadow: '0 4px 16px rgba(0,0,0,0.09)', bgcolor: '#fcfcfc',
         }}>
 
-          {/* ── Level 1+2: Group name suggestions with nested intake card ── */}
           {groupSuggestions.map((record, idx) => {
             const isHighlighted = highlightIdx === idx;
             return (
@@ -322,15 +390,11 @@ function GroupNameDropdown({ value, onChange, onSelectRecord, rows, currentTPA, 
                   '&:hover': { bgcolor: C.blueLightBg },
                   '&:last-of-type': { borderBottom: 'none' },
                 }}>
-
-                {/* Group name row */}
                 <Stack direction="row" alignItems="center"
                   sx={{ px: '14px', pt: '10px', pb: '4px', gap: '8px' }}>
                   <Typography sx={{ fontSize: '14px', fontWeight: 500, color: '#222222', flex: 1, minWidth: 0 }} noWrap>
                     {record.groupName}
                   </Typography>
-
-                  {/* Duplicate badge */}
                   {record.isDuplicate && (
                     <Stack direction="row" alignItems="center" spacing={0.75} sx={{ flexShrink: 0 }}>
                       <Box component="span" sx={{
@@ -354,20 +418,16 @@ function GroupNameDropdown({ value, onChange, onSelectRecord, rows, currentTPA, 
                     </Stack>
                   )}
                 </Stack>
-
-                {/* Intake card — Level 2 */}
                 <Box sx={{
                   mx: '8px', mb: '8px',
-                  bgcolor: '#f7f7f7',
-                  borderRadius: '0 0 6px 6px',
+                  bgcolor: '#f7f7f7', borderRadius: '0 0 6px 6px',
                   px: '12px', pt: '6px', pb: '8px',
                 }}>
                   <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: '3px' }}>
                     <Box component="span" sx={{
                       px: '8px', py: '2px',
                       bgcolor: C.blueLightBg, color: C.blue,
-                      borderRadius: '4px', fontSize: '11px', fontWeight: 600,
-                      flexShrink: 0,
+                      borderRadius: '4px', fontSize: '11px', fontWeight: 600, flexShrink: 0,
                     }}>
                       {record.tpa}
                     </Box>
@@ -379,12 +439,10 @@ function GroupNameDropdown({ value, onChange, onSelectRecord, rows, currentTPA, 
                     Effective: {record.effectiveDate || '—'} · UW: {record.assignedUW}
                   </Typography>
                 </Box>
-
               </Box>
             );
           })}
 
-          {/* ── Create new group ── */}
           <Box
             onMouseDown={handleCreate}
             sx={{
@@ -396,7 +454,6 @@ function GroupNameDropdown({ value, onChange, onSelectRecord, rows, currentTPA, 
             }}>
             + Create "{inputValue}" as new group
           </Box>
-
         </Paper>
       )}
     </Box>
@@ -429,58 +486,111 @@ export default function NewRFP() {
   const { rows, addRow } = useQuoteLog();
 
   // ── Section 1: Group identity
-  const [groupName, setGroupName]             = useState('');
-  const [selectedRecord, setSelectedRecord]   = useState(null);
-  const [renewalOn, setRenewalOn]             = useState(false);
+  const [groupName, setGroupName]                       = useState('');
+  const [selectedRecord, setSelectedRecord]             = useState(null);
+  const [renewalOn, setRenewalOn]                       = useState(false);
   const [prefillBannerDismissed, setPrefillBannerDismissed] = useState(false);
-  const [prefillApplied, setPrefillApplied]   = useState(false);
+  const [prefillApplied, setPrefillApplied]             = useState(false);
+  // FIX 4: unlock for locked renewal group name
+  const [groupNameUnlocked, setGroupNameUnlocked]       = useState(false);
+  const [showUnlockDialog, setShowUnlockDialog]         = useState(false);
 
   // ── Section 2: TPA & Coverage
-  const [tpa, setTpa]                         = useState(null);
-  const [carrier, setCarrier]                 = useState('');
-  const [impSpec, setImpSpec]                 = useState('');
-  const [autoUW, setAutoUW]                   = useState('');
-  const [isEHRC, setIsEHRC]                   = useState(null);
-  const [editCarrier, setEditCarrier]         = useState(false);
-  const [editIS, setEditIS]                   = useState(false);
-  const [autoFillFlash, setAutoFillFlash]     = useState(false);
+  const [tpa, setTpa]                                   = useState(null);
+  const [carrier, setCarrier]                           = useState('');
+  const [impSpec, setImpSpec]                           = useState('');
+  const [autoUW, setAutoUW]                             = useState('');
+  const [editCarrier, setEditCarrier]                   = useState(false);
+  const [editIS, setEditIS]                             = useState(false);
+  const [autoFillFlash, setAutoFillFlash]               = useState(false);
 
   // ── Section 3: Producer & Contact
-  const [producer, setProducer]               = useState('');
-  const [contact, setContact]                 = useState('');
+  const [producer, setProducer]                         = useState('');
+  const [contact, setContact]                           = useState('');
+  // FIX 3: conditional prompt state
+  const [conditionalAnswer, setConditionalAnswer]       = useState(null);
+  const [conditionalDismissed, setConditionalDismissed] = useState(false);
 
   // ── Section 4: Location & Industry
-  const [zipCode, setZipCode]                 = useState('');
-  const [derivedState, setDerivedState]       = useState('');
-  const [stateBlocked, setStateBlocked]       = useState(false);
-  const [sicCode, setSicCode]                 = useState('');
-  const [sicInfo, setSicInfo]                 = useState(null);
-  const [isDTQ, setIsDTQ]                     = useState(false);
-  const [showDTQModal, setShowDTQModal]       = useState(false);
-  const [dtqOverride, setDtqOverride]         = useState(false);
-  const [overrideReason, setOverrideReason]   = useState('');
+  const [zipCode, setZipCode]                           = useState('');
+  const [derivedState, setDerivedState]                 = useState('');
+  const [stateBlocked, setStateBlocked]                 = useState(false);
+  const [sicCode, setSicCode]                           = useState('');
+  const [sicInfo, setSicInfo]                           = useState(null);
+  const [isDTQ, setIsDTQ]                               = useState(false);
+  const [showDTQModal, setShowDTQModal]                 = useState(false);
+  const [dtqOverride, setDtqOverride]                   = useState(false);
+  const [overrideReason, setOverrideReason]             = useState('');
 
   // ── Section 5: Dates & Urgency
-  const [effectiveDate, setEffectiveDate]     = useState(null);
-  const [receivedDate, setReceivedDate]       = useState(TODAY);
-  const [tpacDate, setTpacDate]               = useState(null);
-  const [isRush, setIsRush]                   = useState(false);
+  const [effectiveDate, setEffectiveDate]               = useState(null);
+  const [receivedDate, setReceivedDate]                 = useState(TODAY);
+  const [isRush, setIsRush]                             = useState(false);
+  // FIX 1: request date override
+  const [requestDateOverridden, setRequestDateOverridden] = useState(false);
+  const [requestDateManual, setRequestDateManual]         = useState(null);
+  // FIX 2: TPAC date override
+  const [tpacOverridden, setTpacOverridden]             = useState(false);
+  const [tpacDate, setTpacDate]                         = useState(null);
+  // FIX 6: date out-of-range errors
+  const [effectiveDateError, setEffectiveDateError]     = useState(false);
+  const [receivedDateError, setReceivedDateError]       = useState(false);
+  const [requestDateError, setRequestDateError]         = useState(false);
+  const [tpacDateError, setTpacDateError]               = useState(false);
 
   // ── Section 6: Underwriter
-  const [underwriter, setUnderwriter]         = useState('');
-  const [uwChangeFrom, setUwChangeFrom]       = useState('');
-  const [excludeUW, setExcludeUW]             = useState(false);
-  const [uwBannerDismissed, setUwBannerDismissed] = useState(false);
+  const [underwriter, setUnderwriter]                   = useState('');
+  const [uwChangeFrom, setUwChangeFrom]                 = useState('');
+  const [excludeUW, setExcludeUW]                       = useState(false);
+  const [uwBannerDismissed, setUwBannerDismissed]       = useState(false);
+  // FIX 5: logged by
+  const [loggedBy, setLoggedBy]                         = useState('');
 
   // ── UI
-  const [showConfirm, setShowConfirm]         = useState(false);
+  const [showConfirm, setShowConfirm]                   = useState(false);
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
-  const requestDate = useMemo(() => {
+  // FIX 1: 5 biz days standard, 3 biz days rush
+  const requestDateAuto = useMemo(() => {
     if (!receivedDate) return null;
-    return addBusinessDays(receivedDate, isRush ? 1 : 3);
+    return addBusinessDays(receivedDate, isRush ? 3 : 5);
   }, [receivedDate, isRush]);
+
+  const requestDate = requestDateOverridden ? requestDateManual : requestDateAuto;
+
+  // FIX 1: validate 10-business-day cap on manual override
+  useEffect(() => {
+    if (!requestDateOverridden || !requestDateManual || !receivedDate) {
+      setRequestDateError(false);
+      return;
+    }
+    const maxDate = addBusinessDays(receivedDate, 10);
+    setRequestDateError(requestDateManual > maxDate);
+  }, [requestDateOverridden, requestDateManual, receivedDate]);
+
+  // FIX 2: TPAC auto = received + 5 biz days
+  const tpacAutoDate = useMemo(() => {
+    if (!receivedDate) return null;
+    return addBusinessDays(receivedDate, 5);
+  }, [receivedDate]);
+
+  const tpacDisplayDate = tpacOverridden ? tpacDate : tpacAutoDate;
+
+  // FIX 3: reset conditional prompt when TPA or producer changes
+  useEffect(() => {
+    setConditionalAnswer(null);
+    setConditionalDismissed(false);
+  }, [tpa?.code, producer]);
+
+  const activeConditionalPrompt = useMemo(() => {
+    if (!tpa || !producer) return null;
+    const producerCode = PRODUCER_OPTIONS.find((p) => p.agency === producer)?.code;
+    if (!producerCode) return null;
+    return CONDITIONAL_PROMPTS.find((p) => p.tpa === tpa.code && p.producer === producerCode) ?? null;
+  }, [tpa, producer]);
+
+  const isSpecialCase = activeConditionalPrompt?.kind !== 'TERMINATED' && conditionalAnswer === true;
 
   const shortLeadTime = useMemo(() => {
     if (!effectiveDate) return false;
@@ -495,13 +605,22 @@ export default function NewRFP() {
 
   const showUWBanner = !!uwChangeFrom && underwriter !== autoUW && !uwBannerDismissed;
 
-  const activeWarnings = useMemo(() => [
-    stateBlocked  && { id: 'state', label: `${derivedState} not quotable`, variant: 'error' },
-    isDTQ         && { id: 'dtq',   label: 'Case marked DTQ',              variant: 'error' },
-    (isEHRC===true)&& { id: 'ehrc', label: 'EHRC: documentation required', variant: 'warning' },
-    shortLeadTime && { id: 'lead',  label: 'Short lead time',              variant: 'warning' },
-  ].filter(Boolean), [stateBlocked, derivedState, isDTQ, isEHRC, shortLeadTime]);
+  // FIX 4: group name is locked when renewal+prefill is active and not manually unlocked
+  const groupNameLocked = renewalOn && prefillApplied && !groupNameUnlocked;
 
+  const activeWarnings = useMemo(() => [
+    stateBlocked      && { id: 'state',   label: `${derivedState} not quotable`,              variant: 'error' },
+    isDTQ             && { id: 'dtq',     label: 'Case marked DTQ',                            variant: 'error' },
+    isSpecialCase     && { id: 'special', label: `${activeConditionalPrompt?.kind} case — documentation required`, variant: 'warning' },
+    shortLeadTime     && { id: 'lead',    label: 'Short lead time',                            variant: 'warning' },
+    effectiveDateError && { id: 'eff-dt', label: 'Effective date out of range',                variant: 'error' },
+    receivedDateError  && { id: 'rec-dt', label: 'Received date out of range',                 variant: 'error' },
+    requestDateError   && { id: 'req-dt', label: 'Request date exceeds 10-business-day cap',   variant: 'error' },
+    tpacDateError      && { id: 'tpac-dt', label: 'TPAC date out of range',                   variant: 'error' },
+  ].filter(Boolean), [stateBlocked, derivedState, isDTQ, isSpecialCase, activeConditionalPrompt, shortLeadTime,
+                       effectiveDateError, receivedDateError, requestDateError, tpacDateError]);
+
+  // FIX 5: added 'Logged by' as required field → 9 total
   const requiredFields = {
     'Group name':     !!groupName,
     'TPA':            !!tpa,
@@ -511,9 +630,10 @@ export default function NewRFP() {
     'Effective date': !!effectiveDate,
     'Received date':  !!receivedDate,
     'Underwriter':    !!underwriter,
+    'Logged by':      !!loggedBy,
   };
   const filledCount = Object.values(requiredFields).filter(Boolean).length;
-  const canSave = filledCount === 8 && !stateBlocked;
+  const canSave = filledCount === 9 && !stateBlocked && !requestDateError && !effectiveDateError && !receivedDateError;
 
   // Progressive locks
   const s2locked = !groupName;
@@ -592,6 +712,7 @@ export default function NewRFP() {
     setRenewalOn(true);
     setPrefillApplied(true);
     setPrefillBannerDismissed(true);
+    setGroupNameUnlocked(false);
   }
 
   function handleGroupNameSelect(record) {
@@ -601,18 +722,25 @@ export default function NewRFP() {
     }
   }
 
+  function handleConfirmUnlock() {
+    setGroupNameUnlocked(true);
+    setPrefillApplied(false);
+    setPrefillBannerDismissed(false);
+    setShowUnlockDialog(false);
+  }
+
   function handleSave() {
     if (!canSave) return;
     addRow({
       groupName,
-      type:         renewalOn ? 'RENEWAL' : 'NEW',
-      tpa:          tpa?.code ?? '',
-      producer:     producer,
+      type:          renewalOn ? 'RENEWAL' : 'NEW',
+      tpa:           tpa?.code ?? '',
+      producer,
       effectiveDate: effectiveDate ? format(effectiveDate, 'MMM d, yyyy') : '—',
-      assignedUW:   tpa?.uwInitials ?? 'SR',
-      requestDate:  format(receivedDate, 'yyyy-MM-dd'),
-      deadline:     requestDate ? format(requestDate, 'yyyy-MM-dd') : format(receivedDate, 'yyyy-MM-dd'),
-      censusStatus: 'Census Received',
+      assignedUW:    tpa?.uwInitials ?? 'SR',
+      requestDate:   format(receivedDate, 'yyyy-MM-dd'),
+      deadline:      requestDate ? format(requestDate, 'yyyy-MM-dd') : format(receivedDate, 'yyyy-MM-dd'),
+      censusStatus:  'Waiting',
       sob: '—', risk: '—', setup: '—',
       isRush,
     });
@@ -693,7 +821,7 @@ export default function NewRFP() {
           <SectionCard title="Group identity">
             <Stack spacing={2}>
 
-              {/* Group name autocomplete */}
+              {/* FIX 4: pass locked state and unlock handler */}
               <GroupNameDropdown
                 value={groupName}
                 onChange={setGroupName}
@@ -701,6 +829,8 @@ export default function NewRFP() {
                 rows={rows}
                 currentTPA={tpa}
                 navigate={navigate}
+                locked={groupNameLocked}
+                onUnlock={() => setShowUnlockDialog(true)}
               />
 
               {/* Renewal detection banner */}
@@ -767,6 +897,7 @@ export default function NewRFP() {
           </SectionCard>
 
           {/* ── S2: TPA & Coverage ── */}
+          {/* FIX 3: EHRC static toggle removed; replaced by dynamic conditional prompt in S3 */}
           <SectionCard title="TPA & Coverage" locked={s2locked} lockedHint="Enter a group name first">
             <Stack spacing={2}>
 
@@ -816,17 +947,6 @@ export default function NewRFP() {
                 </Stack>
               )}
 
-              {/* EHRC */}
-              <Box>
-                <Typography sx={{ fontSize: '13px', fontWeight: 500, color: '#28313e', mb: '8px' }}>Is this an EHRC case?</Typography>
-                <SegmentedYesNo value={isEHRC} onChange={setIsEHRC} />
-                <Collapse in={isEHRC === true} unmountOnExit>
-                  <InlineBanner variant="warning">
-                    <strong>EHRC case</strong> — additional documentation required. Compliance team will be notified on save.
-                  </InlineBanner>
-                </Collapse>
-              </Box>
-
             </Stack>
           </SectionCard>
 
@@ -834,18 +954,18 @@ export default function NewRFP() {
           <SectionCard title="Producer & Contact" locked={s3locked} lockedHint="Select a TPA first">
             <Stack spacing={2}>
               <Autocomplete
-                options={[...PRODUCER_OPTIONS, { agency: '__add__', contact: '' }]}
-                getOptionLabel={(o) => (typeof o === 'string' ? o : o.agency === '__add__' ? '' : `${o.agency} — ${o.contact}`)}
+                options={[...PRODUCER_OPTIONS, { code: '__add__', agency: '__add__', contact: '' }]}
+                getOptionLabel={(o) => (typeof o === 'string' ? o : o.code === '__add__' ? '' : o.agency)}
                 value={PRODUCER_OPTIONS.find((p) => p.agency === producer) ?? null}
                 onChange={(_, v) => {
                   if (!v) { setProducer(''); setContact(''); return; }
-                  if (v.agency === '__add__') return;
+                  if (v.code === '__add__') return;
                   setProducer(v.agency);
                   setContact(v.contact);
                 }}
                 renderInput={(params) => <TextField {...params} label="Producer" size="small" placeholder="Agency name or producer" />}
                 renderOption={(props, opt) => {
-                  if (opt.agency === '__add__') {
+                  if (opt.code === '__add__') {
                     return (
                       <li {...props} key="add" onClick={() => alert('New producer request noted. Contact admin to add.')}>
                         <Typography sx={{ fontSize: '14px', color: C.blueLight, fontWeight: 500 }}>+ Add new producer</Typography>
@@ -853,15 +973,57 @@ export default function NewRFP() {
                     );
                   }
                   return (
-                    <li {...props} key={opt.agency}>
+                    <li {...props} key={opt.code}>
                       <Stack>
                         <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{opt.agency}</Typography>
-                        <Typography sx={{ fontSize: '12px', color: C.grayMid }}>{opt.contact}</Typography>
+                        {opt.contact && <Typography sx={{ fontSize: '12px', color: C.grayMid }}>{opt.contact}</Typography>}
                       </Stack>
                     </li>
                   );
                 }}
               />
+
+              {/* FIX 3: conditional prompt banner — appears only for matching TPA+Producer combos */}
+              {activeConditionalPrompt && !conditionalDismissed && (
+                activeConditionalPrompt.kind === 'TERMINATED' ? (
+                  <Box sx={{
+                    p: '12px 16px', backgroundColor: '#fdecea',
+                    borderLeft: '3px solid #c91717', borderRadius: '6px',
+                  }}>
+                    <Typography sx={{ fontSize: '14px', color: '#28313e', mb: 1, lineHeight: 1.6 }}>
+                      <strong>This relationship is terminated.</strong> Send a decline to quote — #18.
+                    </Typography>
+                    <Button size="small" variant="contained"
+                      onClick={() => { setIsDTQ(true); setConditionalDismissed(true); }}
+                      sx={{ bgcolor: C.red, fontSize: '12px', height: 28, boxShadow: 'none', '&:hover': { bgcolor: '#a01010', boxShadow: 'none' } }}>
+                      Mark as Declined
+                    </Button>
+                  </Box>
+                ) : (
+                  <Box sx={{
+                    p: '12px 16px', backgroundColor: '#fff3e0',
+                    borderLeft: `3px solid #b25f01`, borderRadius: '6px',
+                  }}>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between">
+                      <Typography sx={{ fontSize: '14px', color: '#28313e', mr: 2 }}>
+                        {activeConditionalPrompt.question}
+                      </Typography>
+                      <Stack direction="row" alignItems="center" spacing={1.5}>
+                        <SegmentedYesNo value={conditionalAnswer} onChange={setConditionalAnswer} />
+                        <IconButton size="small" onClick={() => setConditionalDismissed(true)} sx={{ p: 0.25, color: C.grayMid }}>
+                          <CloseIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      </Stack>
+                    </Stack>
+                    {conditionalAnswer === true && (
+                      <Typography sx={{ fontSize: '12px', color: '#b25f01', mt: 1 }}>
+                        <strong>{activeConditionalPrompt.kind} case</strong> — additional documentation required. Compliance team will be notified on save.
+                      </Typography>
+                    )}
+                  </Box>
+                )
+              )}
+
               <TextField label="Contact name (optional)" size="small" fullWidth value={contact}
                 onChange={(e) => setContact(e.target.value)}
                 placeholder="e.g. John Smith, Benefits Coordinator" />
@@ -912,11 +1074,17 @@ export default function NewRFP() {
           <SectionCard title="Dates & urgency" locked={s5locked} lockedHint="Select a TPA first">
             <Stack spacing={2}>
               <Grid container spacing={2} alignItems="flex-start">
-                {/* Effective date */}
+
+                {/* FIX 6: Effective date with out-of-range validation */}
                 <Grid item xs={12} sm={4}>
-                  <DatePicker label="Effective date *" value={effectiveDate} onChange={setEffectiveDate}
-                    slotProps={{ textField: { size: 'small', fullWidth: true, error: !effectiveDate, helperText: !effectiveDate ? 'Required' : '' } }} />
-                  {shortLeadTime && (
+                  <DatePicker label="Effective date *" value={effectiveDate}
+                    onChange={(v) => { setEffectiveDate(v); setEffectiveDateError(isDateOutOfRange(v)); }}
+                    slotProps={{ textField: {
+                      size: 'small', fullWidth: true,
+                      error: !effectiveDate || effectiveDateError,
+                      helperText: effectiveDateError ? 'Date must be within 6 months of today.' : !effectiveDate ? 'Required' : '',
+                    }}} />
+                  {shortLeadTime && !effectiveDateError && (
                     <Box sx={{ mt: 0.75 }}>
                       <InlineBanner variant="warning">
                         Short lead time.{' '}
@@ -928,20 +1096,56 @@ export default function NewRFP() {
                     </Box>
                   )}
                 </Grid>
-                {/* Received date */}
+
+                {/* FIX 6: Received date with out-of-range validation */}
                 <Grid item xs={12} sm={4}>
                   <Box sx={{ position: 'relative' }}>
-                    <DatePicker label="Received date *" value={receivedDate} onChange={setReceivedDate}
-                      slotProps={{ textField: { size: 'small', fullWidth: true } }} />
-                    <Chip label="Today" size="small" clickable onClick={() => setReceivedDate(TODAY)}
-                      sx={{ position: 'absolute', right: 36, top: '50%', transform: 'translateY(-50%)', height: 20, fontSize: '10px', bgcolor: C.blueLightBg, color: C.blueLight, '& .MuiChip-label': { px: 0.75 } }} />
+                    <DatePicker label="Received date *" value={receivedDate}
+                      onChange={(v) => { setReceivedDate(v); setReceivedDateError(isDateOutOfRange(v)); }}
+                      slotProps={{ textField: {
+                        size: 'small', fullWidth: true,
+                        error: receivedDateError,
+                        helperText: receivedDateError ? 'Date must be within 6 months of today.' : '',
+                      }}} />
+                    {!receivedDateError && (
+                      <Chip label="Today" size="small" clickable onClick={() => { setReceivedDate(TODAY); setReceivedDateError(false); }}
+                        sx={{ position: 'absolute', right: 36, top: '50%', transform: 'translateY(-50%)', height: 20, fontSize: '10px', bgcolor: C.blueLightBg, color: C.blueLight, '& .MuiChip-label': { px: 0.75 } }} />
+                    )}
                   </Box>
                 </Grid>
-                {/* TPAC date — only for renewals */}
-                <Collapse in={renewalOn} unmountOnExit component={Grid} item xs={12} sm={4}>
-                  <DatePicker label="TPAC date" value={tpacDate} onChange={setTpacDate}
-                    slotProps={{ textField: { size: 'small', fullWidth: true, placeholder: 'Optional for renewals' } }} />
-                </Collapse>
+
+                {/* FIX 2: TPAC date — always visible, auto-calculated 5 biz days from received */}
+                <Grid item xs={12} sm={4}>
+                  {tpacOverridden ? (
+                    <DatePicker label="TPAC date"
+                      value={tpacDate}
+                      onChange={(v) => { setTpacDate(v); setTpacDateError(isDateOutOfRange(v)); }}
+                      slotProps={{ textField: {
+                        size: 'small', fullWidth: true,
+                        error: tpacDateError,
+                        helperText: tpacDateError ? 'Date must be within 6 months of today.' : 'Client-specified',
+                      }}} />
+                  ) : (
+                    <Box>
+                      <Typography sx={{ fontSize: '13px', fontWeight: 500, color: '#28313e', mb: '6px' }}>TPAC date</Typography>
+                      <Stack direction="row" alignItems="center"
+                        sx={{ height: 40, borderRadius: '6px', border: `1px solid ${C.divider}`, bgcolor: '#f1f1f1', px: 1.5, gap: 1 }}>
+                        <LockOutlinedIcon sx={{ fontSize: 13, color: C.grayMid }} />
+                        <Typography sx={{ fontSize: '14px', color: '#28313e', flex: 1 }}>
+                          {tpacDisplayDate ? format(tpacDisplayDate, 'MMM d, yyyy') : '—'}
+                        </Typography>
+                        <Typography component="span" onClick={() => setTpacOverridden(true)}
+                          sx={{ fontSize: '12px', color: C.blueLight, cursor: 'pointer', whiteSpace: 'nowrap', '&:hover': { textDecoration: 'underline' } }}>
+                          Override
+                        </Typography>
+                      </Stack>
+                      <Typography sx={{ fontSize: '12px', color: C.grayMid, mt: '4px' }}>
+                        Auto-calculated · 5 business days from received date
+                      </Typography>
+                    </Box>
+                  )}
+                </Grid>
+
               </Grid>
 
               {/* Rush toggle */}
@@ -957,33 +1161,54 @@ export default function NewRFP() {
                       </Box>
                     )}
                   </Stack>
+                  {/* FIX 1: updated SLA text */}
                   <Typography sx={{ fontSize: '12px', color: C.grayMid, mt: 0.25 }}>
-                    {isRush ? 'Due date recalculates to 1 business day.' : 'Prioritized in UW queue'}
+                    {isRush ? 'Due date recalculates to 3 business days.' : 'Prioritized in UW queue'}
                   </Typography>
                 </Box>
                 <Switch checked={isRush} onChange={(e) => setIsRush(e.target.checked)}
                   sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: C.orange }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: C.orange } }} />
               </Stack>
 
-              {/* Request date — read-only */}
+              {/* FIX 1: Request date — auto-calculated with override link */}
               <Box>
                 <Typography sx={{ fontSize: '13px', fontWeight: 500, color: '#28313e', mb: '6px' }}>Request date</Typography>
-                <Stack direction="row" alignItems="center" spacing={1.5}
-                  sx={{ height: 40, borderRadius: '6px', border: `1px solid ${C.divider}`, bgcolor: '#f1f1f1', px: 1.5 }}>
-                  <LockOutlinedIcon sx={{ fontSize: 14, color: C.grayMid }} />
-                  <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#28313e', flex: 1 }}>
-                    {requestDate ? format(requestDate, 'MMM d, yyyy') : '—'}
-                  </Typography>
-                  {isRush && (
-                    <Box component="span"
-                      sx={{ px: 0.75, py: 0.2, borderRadius: '4px', border: '1px solid #ffe0b2', bgcolor: '#fff3e0', fontSize: '10px', fontWeight: 600, color: C.orange }}>
-                      Rush
-                    </Box>
-                  )}
-                </Stack>
-                <Typography sx={{ fontSize: '12px', color: C.grayMid, mt: '4px' }}>
-                  Auto-calculated · SLA: {isRush ? '1 business day' : '3 business days'}
-                </Typography>
+                {requestDateOverridden ? (
+                  <DatePicker label="Request date"
+                    value={requestDateManual}
+                    onChange={(v) => { setRequestDateManual(v); }}
+                    slotProps={{ textField: {
+                      size: 'small', fullWidth: true,
+                      error: requestDateError,
+                      helperText: requestDateError
+                        ? 'Request date cannot exceed 10 business days from received date.'
+                        : 'Client-specified',
+                    }}} />
+                ) : (
+                  <>
+                    <Stack direction="row" alignItems="center" spacing={1.5}
+                      sx={{ height: 40, borderRadius: '6px', border: `1px solid ${C.divider}`, bgcolor: '#f1f1f1', px: 1.5 }}>
+                      <LockOutlinedIcon sx={{ fontSize: 14, color: C.grayMid }} />
+                      <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#28313e', flex: 1 }}>
+                        {requestDateAuto ? format(requestDateAuto, 'MMM d, yyyy') : '—'}
+                      </Typography>
+                      {isRush && (
+                        <Box component="span"
+                          sx={{ px: 0.75, py: 0.2, borderRadius: '4px', border: '1px solid #ffe0b2', bgcolor: '#fff3e0', fontSize: '10px', fontWeight: 600, color: C.orange }}>
+                          Rush
+                        </Box>
+                      )}
+                      <Typography component="span" onClick={() => setRequestDateOverridden(true)}
+                        sx={{ fontSize: '12px', color: C.blueLight, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                        Override
+                      </Typography>
+                    </Stack>
+                    {/* FIX 1: updated SLA label */}
+                    <Typography sx={{ fontSize: '12px', color: C.grayMid, mt: '4px' }}>
+                      Auto-calculated · SLA: {isRush ? '3 business days' : '5 business days'}
+                    </Typography>
+                  </>
+                )}
               </Box>
             </Stack>
           </SectionCard>
@@ -1017,6 +1242,14 @@ export default function NewRFP() {
                   </Stack>
                 </Box>
               )}
+
+              {/* FIX 5: Logged by — required */}
+              <FormControl fullWidth size="small">
+                <InputLabel>Logged by *</InputLabel>
+                <Select value={loggedBy} label="Logged by *" onChange={(e) => setLoggedBy(e.target.value)}>
+                  {LOGGED_BY_OPTIONS.map((l) => <MenuItem key={l} value={l} sx={{ fontSize: '14px' }}>{l}</MenuItem>)}
+                </Select>
+              </FormControl>
             </Stack>
           </SectionCard>
 
@@ -1049,7 +1282,7 @@ export default function NewRFP() {
                 <Stack direction="row" spacing={0.75} sx={{ mt: 1.5, bgcolor: C.bgPage, borderRadius: 1, p: '8px 10px' }}>
                   <InfoOutlinedIcon sx={{ fontSize: 14, color: C.grayMid, mt: '1px', flexShrink: 0 }} />
                   <Typography sx={{ fontSize: '11px', color: C.grayMid, lineHeight: 1.5 }}>
-                    {isEHRC === true ? 'EHRC case — additional documentation required.' : isDTQ ? 'Marked DTQ — this case cannot be quoted.' : tpa.notes}
+                    {isSpecialCase ? `${activeConditionalPrompt.kind} case — additional documentation required.` : isDTQ ? 'Marked DTQ — this case cannot be quoted.' : tpa.notes}
                   </Typography>
                 </Stack>
               )}
@@ -1060,27 +1293,30 @@ export default function NewRFP() {
             </Paper>
           )}
 
-          {/* Request Date */}
+          {/* FIX 1: Request Date panel with updated SLA */}
           {receivedDate && (
             <PanelCard title="Request date">
               {[
                 { lbl: 'Received', val: format(receivedDate, 'MMM d, yyyy') },
                 { lbl: 'Rush',     val: isRush ? 'Yes' : 'No' },
-                { lbl: 'SLA',      val: isRush ? '1 business day' : '3 business days' },
+                { lbl: 'SLA',      val: isRush ? '3 business days' : '5 business days' },
               ].map(({ lbl, val }) => (
                 <Stack key={lbl} direction="row" justifyContent="space-between" sx={{ py: 0.55 }}>
                   <Typography sx={{ fontSize: '12px', color: C.grayMid }}>{lbl}</Typography>
                   <Typography sx={{ fontSize: '12px', fontWeight: 500, color: isRush && lbl === 'Rush' ? C.orange : C.black }}>{val}</Typography>
                 </Stack>
               ))}
+              {requestDateOverridden && (
+                <Typography sx={{ fontSize: '11px', color: C.grayMid, mt: 0.5, fontStyle: 'italic' }}>Client-specified date</Typography>
+              )}
               <Divider sx={{ my: 1 }} />
               <Stack direction="row" justifyContent="space-between" alignItems="center">
                 <Typography sx={{ fontSize: '13px', fontWeight: 600, color: C.black }}>Due by</Typography>
                 <Stack direction="row" alignItems="center" spacing={1}>
-                  <Typography sx={{ fontSize: '15px', fontWeight: 700, color: isRush ? C.orange : C.green }}>
+                  <Typography sx={{ fontSize: '15px', fontWeight: 700, color: requestDateError ? C.red : isRush ? C.orange : C.green }}>
                     {requestDate ? format(requestDate, 'MMM d, yyyy') : '—'}
                   </Typography>
-                  {isRush && (
+                  {isRush && !requestDateOverridden && (
                     <Box component="span" sx={{ px: 0.75, py: 0.2, borderRadius: '4px', border: '1px solid #ffe0b2', bgcolor: '#fff3e0', fontSize: '10px', fontWeight: 700, color: C.orange }}>Rush</Box>
                   )}
                 </Stack>
@@ -1109,11 +1345,11 @@ export default function NewRFP() {
             </PanelCard>
           )}
 
-          {/* Required fields checklist */}
+          {/* FIX 5: Required fields — now 9 */}
           <PanelCard title="Required fields"
             titleRight={
-              <Typography sx={{ fontSize: '12px', fontWeight: 600, color: filledCount === 8 ? C.green : C.blueLight }}>
-                {filledCount} / 8
+              <Typography sx={{ fontSize: '12px', fontWeight: 600, color: filledCount === 9 ? C.green : C.blueLight }}>
+                {filledCount} / 9
               </Typography>
             }>
             {Object.entries(requiredFields).map(([lbl, done]) => (
@@ -1121,7 +1357,7 @@ export default function NewRFP() {
             ))}
           </PanelCard>
 
-          {/* Pre-save confirmation drawer */}
+          {/* Pre-save confirmation */}
           <Collapse in={showConfirm} unmountOnExit>
             <Paper elevation={0} sx={{ border: `1px solid ${C.divider}`, borderRadius: 2, p: '16px 20px', bgcolor: C.bgPaper }}>
               <Typography sx={{ fontSize: '14px', fontWeight: 600, color: C.black, mb: 1 }}>Ready to save?</Typography>
@@ -1135,7 +1371,9 @@ export default function NewRFP() {
                     <Box component="span" sx={{ px: 0.75, py: 0.2, borderRadius: '4px', border: '1px solid #ffe0b2', bgcolor: '#fff3e0', fontSize: '11px', fontWeight: 600, color: C.orange }}>Rush</Box>
                   )}
                   {requestDate && (
-                    <Typography sx={{ fontSize: '12px', color: C.grayMid }}>Due {format(requestDate, 'MMM d, yyyy')}</Typography>
+                    <Typography sx={{ fontSize: '12px', color: C.grayMid }}>
+                      Due {format(requestDate, 'MMM d, yyyy')}{requestDateOverridden ? ' (client-specified)' : ''}
+                    </Typography>
                   )}
                 </Stack>
               </Stack>
@@ -1147,7 +1385,6 @@ export default function NewRFP() {
               </Stack>
             </Paper>
           </Collapse>
-
 
         </Box>
       </Box>
@@ -1170,6 +1407,28 @@ export default function NewRFP() {
           <Button variant="contained" onClick={handleMarkDTQ}
             sx={{ bgcolor: C.red, '&:hover': { bgcolor: '#a01010' } }}>
             Mark DTQ
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* FIX 4: Unlock group name confirmation dialog */}
+      <Dialog open={showUnlockDialog} onClose={() => setShowUnlockDialog(false)} maxWidth="xs" fullWidth
+        PaperProps={{ sx: { borderRadius: 2, border: `1px solid ${C.divider}` } }}>
+        <DialogTitle sx={{ fontSize: '16px', fontWeight: 600, color: C.black, pb: 1 }}>
+          Unlock group name?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ fontSize: '14px', color: C.grayMid, lineHeight: 1.6 }}>
+            Changing the name on a renewal may break the link to prior year data. Continue?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button variant="outlined" onClick={() => setShowUnlockDialog(false)} sx={{ borderColor: C.divider, color: C.black }}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleConfirmUnlock}
+            sx={{ bgcolor: C.blueLight, '&:hover': { bgcolor: '#0e57a0' } }}>
+            Unlock & edit
           </Button>
         </DialogActions>
       </Dialog>
