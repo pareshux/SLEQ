@@ -5,7 +5,6 @@ import {
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import FlagIcon from '@mui/icons-material/Flag';
 import InboxOutlinedIcon from '@mui/icons-material/InboxOutlined';
 import { differenceInCalendarDays, parseISO, format } from 'date-fns';
@@ -88,18 +87,11 @@ function EditableStatusCell({ value, options, onChange, readOnly }) {
 
 // ─── Type chip ────────────────────────────────────────────────────────────────
 
-function TypeChip({ type }) {
+function TypeText({ type }) {
   return (
-    <Box component="span" sx={{
-      display: 'inline-flex', alignItems: 'center',
-      px: '10px', py: '3px',
-      fontSize: '12px', fontWeight: 500,
-      borderRadius: '20px', whiteSpace: 'nowrap',
-      backgroundColor: '#f1f1f1', color: '#28313e',
-      border: '1px solid #e8e8e8',
-    }}>
+    <Typography sx={{ fontSize: '14px', color: '#28313e', fontWeight: 400 }}>
       {type === 'RENEWAL' ? 'Renewal' : 'New'}
-    </Box>
+    </Typography>
   );
 }
 
@@ -165,7 +157,7 @@ function buildColumns(navigate, handleCellUpdate, savedFlash) {
     },
     {
       field: 'type', headerName: 'Type', width: 96,
-      renderCell: ({ row }) => <TypeChip type={row.type} />,
+      renderCell: ({ row }) => <TypeText type={row.type} />,
     },
     {
       field: 'tpa', headerName: 'TPA', width: 80,
@@ -196,7 +188,7 @@ function buildColumns(navigate, handleCellUpdate, savedFlash) {
         const days = differenceInCalendarDays(parseISO(row.deadline), TODAY);
         const isOverdue = days < 0;
         const dateColor = row.isDTQ ? C.grayMid : isOverdue ? C.red : C.black;
-        const subColor  = row.isDTQ ? '#c0c0c0' : isOverdue ? C.red : C.grayMid;
+        const subColor  = row.isDTQ ? '#c0c0c0' : row.isHandedOff ? C.grayMid : isOverdue ? C.red : C.grayMid;
         let sub;
         if (row.isHandedOff)       sub = 'Handed off';
         else if (days > 0)         sub = `${days}d remaining`;
@@ -305,19 +297,6 @@ function buildColumns(navigate, handleCellUpdate, savedFlash) {
         );
       },
     },
-    {
-      field: '_state', headerName: '', width: 44, sortable: false,
-      renderCell: ({ row }) => {
-        if (row.isDTQ || row.isHandedOff) {
-          return (
-            <Tooltip title={row.isDTQ ? 'Declined to quote' : 'Handed off — read only'}>
-              <LockOutlinedIcon sx={{ fontSize: 14, color: row.isDTQ ? C.red : C.grayMid }} />
-            </Tooltip>
-          );
-        }
-        return null;
-      },
-    },
   ];
 }
 
@@ -395,51 +374,65 @@ export default function QuoteLog() {
       </Stack>
 
       {/* ── Filter bar ── */}
-      <Stack direction="row" alignItems="center" spacing={0} sx={{ mb: '16px', flexWrap: 'wrap', gap: '6px' }}>
+      <Stack direction="row" alignItems="center" sx={{ mb: '16px', flexWrap: 'wrap', gap: '12px' }}>
 
-        {/* UW dropdown chip */}
-        <Select
-          value={uwFilter}
-          onChange={(e) => setUwFilter(e.target.value)}
-          variant="outlined"
-          size="small"
-          sx={{
-            height: 32, borderRadius: '20px', fontSize: '13px',
-            fontWeight: uwFilter !== 'All UW' ? 500 : 400,
-            color: uwFilter !== 'All UW' ? C.blue : '#28313e',
-            bgcolor: uwFilter !== 'All UW' ? C.blueLightBg : '#fcfcfc',
-            '& .MuiOutlinedInput-notchedOutline': {
-              borderColor: uwFilter !== 'All UW' ? C.blueLight : C.divider,
-            },
-            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.blueLight },
-            '& .MuiSelect-select': { py: 0, pl: 1.75, pr: '28px !important', display: 'flex', alignItems: 'center', height: '32px' },
-          }}
-          MenuProps={{ PaperProps: { sx: { borderRadius: '8px', border: `1px solid ${C.divider}`, boxShadow: '0 4px 16px rgba(0,0,0,0.08)', mt: 0.5 } } }}
-        >
-          {UW_OPTIONS.map((opt) => (
-            <MenuItem key={opt} value={opt} sx={{ fontSize: '13px' }}>{opt}</MenuItem>
+        {/* Underwriter group */}
+        <Stack direction="row" alignItems="center" spacing="6px">
+          <Typography sx={{ fontSize: '11px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.grayMid, whiteSpace: 'nowrap' }}>
+            Underwriter
+          </Typography>
+          <Select
+            value={uwFilter}
+            onChange={(e) => setUwFilter(e.target.value)}
+            variant="outlined"
+            size="small"
+            sx={{
+              height: 32, borderRadius: '20px', fontSize: '13px',
+              fontWeight: uwFilter !== 'All UW' ? 500 : 400,
+              color: uwFilter !== 'All UW' ? C.blue : '#28313e',
+              bgcolor: uwFilter !== 'All UW' ? C.blueLightBg : '#fcfcfc',
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: uwFilter !== 'All UW' ? C.blueLight : C.divider,
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.blueLight },
+              '& .MuiSelect-select': { py: 0, pl: 1.75, pr: '28px !important', display: 'flex', alignItems: 'center', height: '32px' },
+            }}
+            MenuProps={{ PaperProps: { sx: { borderRadius: '8px', border: `1px solid ${C.divider}`, boxShadow: '0 4px 16px rgba(0,0,0,0.08)', mt: 0.5 } } }}
+          >
+            {UW_OPTIONS.map((opt) => (
+              <MenuItem key={opt} value={opt} sx={{ fontSize: '13px' }}>{opt}</MenuItem>
+            ))}
+          </Select>
+        </Stack>
+
+        <Box sx={{ width: '4px' }} />
+
+        {/* Status group */}
+        <Stack direction="row" alignItems="center" spacing="6px">
+          <Typography sx={{ fontSize: '11px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.grayMid, whiteSpace: 'nowrap' }}>
+            Status
+          </Typography>
+          {STATUS_FILTERS.map((s) => (
+            <FilterChip key={s} label={s} selected={statusFilter === s} onClick={() => setStatusFilter(s)} />
           ))}
-        </Select>
+        </Stack>
 
-        {/* Spacer between groups */}
-        <Box sx={{ width: '10px' }} />
+        <Box sx={{ width: '4px' }} />
 
-        {/* Status chips */}
-        {STATUS_FILTERS.map((s) => (
-          <FilterChip key={s} label={s} selected={statusFilter === s} onClick={() => setStatusFilter(s)} />
-        ))}
-
-        <Box sx={{ width: '10px' }} />
-
-        {/* Type chips */}
-        {TYPE_FILTERS.map((t) => (
-          <FilterChip
-            key={t}
-            label={t === 'Rush' ? 'Rush only' : t}
-            selected={typeFilter === t}
-            onClick={() => setTypeFilter(t)}
-          />
-        ))}
+        {/* Type group */}
+        <Stack direction="row" alignItems="center" spacing="6px">
+          <Typography sx={{ fontSize: '11px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.grayMid, whiteSpace: 'nowrap' }}>
+            Type
+          </Typography>
+          {TYPE_FILTERS.map((t) => (
+            <FilterChip
+              key={t}
+              label={t === 'Rush' ? 'Rush only' : t}
+              selected={typeFilter === t}
+              onClick={() => setTypeFilter(t)}
+            />
+          ))}
+        </Stack>
 
         {hasActiveFilter && (
           <Box component="button" onClick={clearFilters}
@@ -506,17 +499,7 @@ export default function QuoteLog() {
             '& .MuiDataGrid-row.row-dtq': { cursor: 'default' },
             '& .MuiDataGrid-row.row-handed-off': { cursor: 'default' },
             '& .MuiDataGrid-row:hover': { backgroundColor: '#f7f7f7' },
-            '& .MuiDataGrid-row.row-rush': {
-              boxShadow: `inset 3px 0 0 ${C.orange}`,
-              backgroundColor: '#fffdf8',
-            },
-            '& .MuiDataGrid-row.row-rush:hover': { backgroundColor: '#fff8ec' },
-            '& .MuiDataGrid-row.row-dtq': { backgroundColor: '#fff8f7' },
             '& .MuiDataGrid-row.row-dtq .MuiDataGrid-cell': { opacity: 0.55 },
-            '& .MuiDataGrid-row.row-dtq:hover': { backgroundColor: '#fff0ee' },
-            '& .MuiDataGrid-row.row-overdue': { backgroundColor: '#fff8f7' },
-            '& .MuiDataGrid-row.row-handed-off': { backgroundColor: '#f7f7f7' },
-            '& .MuiDataGrid-row.row-handed-off:hover': { backgroundColor: '#f1f1f1' },
             '& .MuiDataGrid-row:last-child .MuiDataGrid-cell': { borderBottom: 'none' },
           }}
         />

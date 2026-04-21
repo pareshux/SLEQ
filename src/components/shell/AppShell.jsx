@@ -80,7 +80,7 @@ export default function AppShell({ children }) {
             return (
               <ListItemButton key={item.path} selected={active} onClick={() => navigate(item.path)}
                 sx={{
-                  mx: '8px', mb: '2px', px: '12px', py: '9px',
+                  mx: '8px', mb: '3px', px: '12px', py: '11px',
                   gap: '10px', borderRadius: '6px',
                   bgcolor: active ? '#e1eaf7 !important' : 'transparent',
                   '&:hover': { bgcolor: active ? '#e1eaf7 !important' : '#f1f1f1 !important' },
@@ -108,12 +108,12 @@ export default function AppShell({ children }) {
         flexGrow: 1,
         mt: `${APPBAR_HEIGHT}px`,
         ml: `${SIDEBAR_WIDTH}px`,
-        px: '32px',
+        px: 'clamp(32px, 3vw, 80px)',
         pt: '28px',
         pb: '40px',
         minHeight: `calc(100vh - ${APPBAR_HEIGHT}px)`,
-        maxWidth: `calc(1440px - ${SIDEBAR_WIDTH}px)`,
-        '@media (max-width: 1280px)': { px: '24px' },
+        width: `calc(100% - ${SIDEBAR_WIDTH}px)`,
+        boxSizing: 'border-box',
       }}>
         {children}
       </Box>
