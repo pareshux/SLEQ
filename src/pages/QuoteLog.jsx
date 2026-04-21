@@ -21,6 +21,17 @@ const SOB_OPTIONS    = ['—', 'Received', 'In Progress', 'Entered', 'DTQ'];
 const RISK_OPTIONS   = ['—', 'Received', 'In Progress', 'Entered', 'DTQ'];
 const SETUP_OPTIONS  = ['—', 'In Progress', 'Done'];
 
+const STATUS_FILTERS = ['All', 'In Progress', 'Done', 'DTQ'];
+const TYPE_FILTERS   = ['All', 'New', 'Renewal', 'Rush'];
+
+// Full names for UW dropdown; mapped to row.assignedUW initials for filtering
+const UW_OPTIONS = ['All Underwriters', 'Steve Rogers', 'Jason M.', 'Vicki C.'];
+const UW_INITIALS_MAP = {
+  'Steve Rogers': 'SR',
+  'Jason M.':     'JM',
+  'Vicki C.':     'VC',
+};
+
 // ─── Status pill ──────────────────────────────────────────────────────────────
 
 function StatusPill({ value }) {
@@ -63,29 +74,29 @@ function EditableStatusCell({ value, options, onChange, readOnly }) {
           cursor: 'pointer',
           '&:hover': { opacity: 0.8 },
         }}
-      MenuProps={{
-        PaperProps: {
-          sx: {
-            borderRadius: '8px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-            border: `1px solid ${C.divider}`,
-            minWidth: 200,
-            mt: 0.5,
+        MenuProps={{
+          PaperProps: {
+            sx: {
+              borderRadius: '8px',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+              border: `1px solid ${C.divider}`,
+              minWidth: 200,
+              mt: 0.5,
+            },
           },
-        },
-      }}
-    >
-      {options.map((opt) => (
-        <MenuItem key={opt} value={opt} sx={{ py: 1, px: 2, fontSize: '14px' }}>
-          <StatusPill value={opt} />
-        </MenuItem>
-      ))}
-    </Select>
+        }}
+      >
+        {options.map((opt) => (
+          <MenuItem key={opt} value={opt} sx={{ py: 1, px: 2, fontSize: '14px' }}>
+            <StatusPill value={opt} />
+          </MenuItem>
+        ))}
+      </Select>
     </Tooltip>
   );
 }
 
-// ─── Type chip ────────────────────────────────────────────────────────────────
+// ─── Type text ────────────────────────────────────────────────────────────────
 
 function TypeText({ type }) {
   return (
@@ -95,21 +106,22 @@ function TypeText({ type }) {
   );
 }
 
-// ─── Filter chip ──────────────────────────────────────────────────────────────
+// ─── Rectangular filter chip ──────────────────────────────────────────────────
 
 function FilterChip({ label, selected, onClick }) {
   return (
     <Box component="button" onClick={onClick}
       sx={{
         display: 'inline-flex', alignItems: 'center',
-        px: '14px', height: 32,
-        borderRadius: '20px', border: `1px solid ${selected ? C.blueLight : C.divider}`,
-        backgroundColor: selected ? C.blueLightBg : '#fcfcfc',
-        color: selected ? C.blue : '#28313e',
+        px: '12px', py: '5px',
+        borderRadius: '6px',
+        border: `1px solid ${selected ? '#1166bb' : '#e8e8e8'}`,
+        backgroundColor: selected ? '#e1eaf7' : '#fcfcfc',
+        color: selected ? '#223377' : '#28313e',
         fontSize: '13px', fontWeight: selected ? 500 : 400,
         cursor: 'pointer', outline: 'none', whiteSpace: 'nowrap',
         transition: 'all 0.12s',
-        '&:hover': { borderColor: C.blueLight, backgroundColor: C.blueLightBg, color: C.blue },
+        '&:hover': { borderColor: '#1166bb', backgroundColor: '#e1eaf7', color: '#223377' },
       }}>
       {label}
     </Box>
@@ -123,8 +135,8 @@ function buildColumns(navigate, handleCellUpdate, savedFlash) {
     {
       field: 'groupName', headerName: 'Group name', flex: 2, minWidth: 220,
       renderCell: ({ row }) => (
-        <Stack direction="row" alignItems="center" spacing={0.75}
-          sx={{ height: '100%', width: '100%', minWidth: 0 }}>
+        // FIX 5: explicit flex box for consistent vertical centering
+        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%', minWidth: 0, gap: '6px' }}>
           {row.isDuplicate && (
             <Tooltip title="Possible duplicate">
               <FlagIcon sx={{ fontSize: 14, color: C.red, flexShrink: 0 }} />
@@ -142,17 +154,20 @@ function buildColumns(navigate, handleCellUpdate, savedFlash) {
             }}>
             {row.groupName}
           </Typography>
+          {/* FIX 4: Rush badge with exact spec styling */}
           {row.isRush && (
             <Box component="span" sx={{
-              flexShrink: 0, px: '7px', py: '2px',
+              flexShrink: 0,
+              display: 'inline-flex', alignItems: 'center',
+              px: '8px', py: '2px',
               borderRadius: '4px', border: '1px solid #ffe0b2',
               backgroundColor: '#fff3e0', fontSize: '11px', fontWeight: 600,
-              color: C.orange, whiteSpace: 'nowrap', lineHeight: 1.4,
+              color: '#b25f01', whiteSpace: 'nowrap', lineHeight: 1.4,
             }}>
               Rush
             </Box>
           )}
-        </Stack>
+        </Box>
       ),
     },
     {
@@ -302,15 +317,11 @@ function buildColumns(navigate, handleCellUpdate, savedFlash) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-const STATUS_FILTERS = ['All', 'In Progress', 'Done', 'DTQ'];
-const TYPE_FILTERS   = ['All', 'New', 'Renewal', 'Rush'];
-const UW_OPTIONS     = ['All UW', 'SR', 'JM', 'VC'];
-
 export default function QuoteLog() {
   const navigate = useNavigate();
   const { rows, updateRow, pendingToast, clearToast } = useQuoteLog();
 
-  const [uwFilter, setUwFilter]         = useState('All UW');
+  const [uwFilter, setUwFilter]         = useState('All Underwriters');
   const [statusFilter, setStatusFilter] = useState('All');
   const [typeFilter, setTypeFilter]     = useState('All');
   const [savedFlash, setSavedFlash]     = useState({});
@@ -328,7 +339,8 @@ export default function QuoteLog() {
   }, [updateRow]);
 
   const filteredRows = useMemo(() => rows.filter((row) => {
-    if (uwFilter !== 'All UW' && row.assignedUW !== uwFilter) return false;
+    const uwInitials = UW_INITIALS_MAP[uwFilter];
+    if (uwInitials && row.assignedUW !== uwInitials) return false;
     if (typeFilter === 'New' && row.type !== 'NEW') return false;
     if (typeFilter === 'Renewal' && row.type !== 'RENEWAL') return false;
     if (typeFilter === 'Rush' && !row.isRush) return false;
@@ -343,108 +355,113 @@ export default function QuoteLog() {
     [navigate, handleCellUpdate, savedFlash],
   );
 
-  const hasActiveFilter = uwFilter !== 'All UW' || statusFilter !== 'All' || typeFilter !== 'All';
+  const hasActiveFilter = uwFilter !== 'All Underwriters' || statusFilter !== 'All' || typeFilter !== 'All';
 
   function clearFilters() {
-    setUwFilter('All UW');
+    setUwFilter('All Underwriters');
     setStatusFilter('All');
     setTypeFilter('All');
   }
 
+  // Shared label style for filter group titles
+  const groupLabelSx = { fontSize: '13px', fontWeight: 500, color: '#28313e', mb: '6px', whiteSpace: 'nowrap' };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-      {/* ── Page header ── */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: '16px' }}>
-        <Typography sx={{ fontSize: '20px', fontWeight: 600, color: C.black, lineHeight: 1 }}>
-          Quote Log
-        </Typography>
+      {/* ── FIX 1: Page title at h2 size ── */}
+      <Typography sx={{ fontSize: '24px', fontWeight: 600, color: '#222222', lineHeight: 1, mb: '20px' }}>
+        Quote Log
+      </Typography>
+
+      {/* ── FIX 2 + 3: Filter bar with stacked group labels + New RFP button ── */}
+      {/* Outer row: filter groups left, New RFP button right, aligned to bottom */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: '20px', gap: '16px' }}>
+
+        {/* Filter groups */}
+        <Box sx={{ display: 'flex', gap: '24px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+
+          {/* Underwriter group */}
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            <Typography sx={groupLabelSx}>Underwriter</Typography>
+            <Select
+              value={uwFilter}
+              onChange={(e) => setUwFilter(e.target.value)}
+              variant="outlined"
+              size="small"
+              sx={{
+                height: 34, borderRadius: '6px', fontSize: '13px',
+                minWidth: 200,
+                fontWeight: uwFilter !== 'All Underwriters' ? 500 : 400,
+                color: uwFilter !== 'All Underwriters' ? '#223377' : '#28313e',
+                bgcolor: uwFilter !== 'All Underwriters' ? '#e1eaf7' : '#fcfcfc',
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: uwFilter !== 'All Underwriters' ? '#1166bb' : '#e8e8e8',
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#1166bb' },
+                '& .MuiSelect-select': { py: 0, pl: 1.5, pr: '28px !important', display: 'flex', alignItems: 'center', height: '34px' },
+              }}
+              MenuProps={{ PaperProps: { sx: { borderRadius: '8px', border: `1px solid ${C.divider}`, boxShadow: '0 4px 16px rgba(0,0,0,0.08)', mt: 0.5 } } }}
+            >
+              {UW_OPTIONS.map((opt) => (
+                <MenuItem key={opt} value={opt} sx={{ fontSize: '13px' }}>{opt}</MenuItem>
+              ))}
+            </Select>
+          </Box>
+
+          {/* Status group */}
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            <Typography sx={groupLabelSx}>Status</Typography>
+            <Stack direction="row" spacing="6px">
+              {STATUS_FILTERS.map((s) => (
+                <FilterChip key={s} label={s} selected={statusFilter === s} onClick={() => setStatusFilter(s)} />
+              ))}
+            </Stack>
+          </Box>
+
+          {/* Type group */}
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            <Typography sx={groupLabelSx}>Type</Typography>
+            <Stack direction="row" spacing="6px">
+              {TYPE_FILTERS.map((t) => (
+                <FilterChip
+                  key={t}
+                  label={t === 'Rush' ? 'Rush Only' : t}
+                  selected={typeFilter === t}
+                  onClick={() => setTypeFilter(t)}
+                />
+              ))}
+            </Stack>
+          </Box>
+
+          {/* Clear filters — inline, bottom-aligned */}
+          {hasActiveFilter && (
+            <Box component="button" onClick={clearFilters}
+              sx={{
+                fontSize: '13px', color: C.blueLight, background: 'none',
+                border: 'none', cursor: 'pointer', outline: 'none', fontFamily: 'inherit',
+                pb: '6px',
+                '&:hover': { textDecoration: 'underline' },
+              }}>
+              Clear filters
+            </Box>
+          )}
+        </Box>
+
+        {/* FIX 3: New RFP button — far right, bottom-aligned with chips */}
         <Button
           variant="contained"
-          startIcon={<AddIcon sx={{ fontSize: '16px !important' }} />}
+          startIcon={<AddIcon sx={{ fontSize: '15px !important' }} />}
           onClick={() => navigate('/new-rfp')}
           sx={{
-            height: 36, px: 2, fontSize: '13px', fontWeight: 500,
-            bgcolor: C.blueLight, color: '#fff', borderRadius: '6px',
-            boxShadow: 'none', border: 'none',
+            height: 36, px: '16px', fontSize: '13px', fontWeight: 500,
+            bgcolor: '#1166bb', color: '#fff', borderRadius: '6px',
+            boxShadow: 'none', border: 'none', flexShrink: 0,
             '&:hover': { bgcolor: '#0e57a0', boxShadow: 'none' },
           }}>
           New RFP
         </Button>
-      </Stack>
-
-      {/* ── Filter bar ── */}
-      <Stack direction="row" alignItems="center" sx={{ mb: '16px', flexWrap: 'wrap', gap: '12px' }}>
-
-        {/* Underwriter group */}
-        <Stack direction="row" alignItems="center" spacing="6px">
-          <Typography sx={{ fontSize: '11px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.grayMid, whiteSpace: 'nowrap' }}>
-            Underwriter
-          </Typography>
-          <Select
-            value={uwFilter}
-            onChange={(e) => setUwFilter(e.target.value)}
-            variant="outlined"
-            size="small"
-            sx={{
-              height: 32, borderRadius: '20px', fontSize: '13px',
-              fontWeight: uwFilter !== 'All UW' ? 500 : 400,
-              color: uwFilter !== 'All UW' ? C.blue : '#28313e',
-              bgcolor: uwFilter !== 'All UW' ? C.blueLightBg : '#fcfcfc',
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: uwFilter !== 'All UW' ? C.blueLight : C.divider,
-              },
-              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: C.blueLight },
-              '& .MuiSelect-select': { py: 0, pl: 1.75, pr: '28px !important', display: 'flex', alignItems: 'center', height: '32px' },
-            }}
-            MenuProps={{ PaperProps: { sx: { borderRadius: '8px', border: `1px solid ${C.divider}`, boxShadow: '0 4px 16px rgba(0,0,0,0.08)', mt: 0.5 } } }}
-          >
-            {UW_OPTIONS.map((opt) => (
-              <MenuItem key={opt} value={opt} sx={{ fontSize: '13px' }}>{opt}</MenuItem>
-            ))}
-          </Select>
-        </Stack>
-
-        <Box sx={{ width: '4px' }} />
-
-        {/* Status group */}
-        <Stack direction="row" alignItems="center" spacing="6px">
-          <Typography sx={{ fontSize: '11px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.grayMid, whiteSpace: 'nowrap' }}>
-            Status
-          </Typography>
-          {STATUS_FILTERS.map((s) => (
-            <FilterChip key={s} label={s} selected={statusFilter === s} onClick={() => setStatusFilter(s)} />
-          ))}
-        </Stack>
-
-        <Box sx={{ width: '4px' }} />
-
-        {/* Type group */}
-        <Stack direction="row" alignItems="center" spacing="6px">
-          <Typography sx={{ fontSize: '11px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.grayMid, whiteSpace: 'nowrap' }}>
-            Type
-          </Typography>
-          {TYPE_FILTERS.map((t) => (
-            <FilterChip
-              key={t}
-              label={t === 'Rush' ? 'Rush only' : t}
-              selected={typeFilter === t}
-              onClick={() => setTypeFilter(t)}
-            />
-          ))}
-        </Stack>
-
-        {hasActiveFilter && (
-          <Box component="button" onClick={clearFilters}
-            sx={{
-              ml: 'auto', fontSize: '13px', color: C.blueLight, background: 'none',
-              border: 'none', cursor: 'pointer', outline: 'none', fontFamily: 'inherit',
-              '&:hover': { textDecoration: 'underline' },
-            }}>
-            Clear filters
-          </Box>
-        )}
-      </Stack>
+      </Box>
 
       {/* ── Data grid ── */}
       <Box sx={{
